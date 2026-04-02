@@ -3,43 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>遗珍 · 智能 3D 展厅</title>
+    <title>遗珍 · 移动端数字展览</title>
     
     <style>
-        /* 保持之前的高级样式 */
+        /* ================= 基础重置 ================= */
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: "PingFang SC", "Microsoft YaHei", serif; color: #e0e0e0; overflow: hidden; touch-action: none; background: #0a0a0a; background-image: url('https://images.unsplash.com/photo-1541123356219-284ebe98ae3b?q=80&w=2000&auto=format&fit=crop'); background-size: cover; background-position: center; }
-        .bg-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 12, 18, 0.8); backdrop-filter: blur(10px); z-index: 0; }
+        body { 
+            font-family: "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif; 
+            background: #111; color: #f0f0f0; overflow: hidden; touch-action: none; 
+            background-image: radial-gradient(circle at 50% 50%, #2a303c 0%, #0d1117 100%);
+        }
+        
         #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        .ui-layer { position: absolute; z-index: 10; pointer-events: none; }
-        .ui-layer > * { pointer-events: auto; }
         
-        /* 顶部导航 */
-        header { top: 0; left: 0; width: 100%; height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); border-bottom: 1px solid rgba(212, 175, 55, 0.2); }
-        .logo { font-size: 20px; font-weight: bold; color: #fff; letter-spacing: 2px; }
-        .logo span { color: #d4af37; }
+        /* UI 绝对定位容器，确保所有控制层盖在 3D 画布上方 */
+        #ui-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        /* 允许子元素接收点击 */
+        #ui-container > * { pointer-events: auto; }
 
-        /* 左侧信息牌 */
-        .info-card { top: 120px; left: 40px; width: 340px; background: rgba(18, 25, 38, 0.7); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 25px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
-        .info-card h1 { font-size: 24px; color: #e6c27a; margin-bottom: 5px; }
-        .description { font-size: 13px; color: #bbb; line-height: 1.7; margin-bottom: 20px; height: 100px; overflow-y: auto; }
+        /* ================= 顶部：文物介绍 ================= */
+        .top-info {
+            margin: 20px 20px 0; padding: 20px;
+            background: rgba(20, 25, 30, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .top-info h1 { font-size: 22px; color: #e6c27a; margin-bottom: 6px; font-weight: 500; letter-spacing: 1px; }
+        .top-info .meta { font-size: 11px; color: #888; margin-bottom: 12px; letter-spacing: 1px; }
+        .top-info .desc { font-size: 13px; color: #ccc; line-height: 1.6; max-height: 60px; overflow-y: auto; text-align: justify; }
 
-        /* ================= 音频播放器样式 ================= */
-        .audio-player { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 15px; border: 1px solid rgba(212, 175, 55, 0.2); }
-        .audio-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-        #play-btn { background: #d4af37; border: none; width: 32px; height: 32px; border-radius: 50%; color: #000; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
-        #play-btn:hover { background: #fff; transform: scale(1.1); }
+        /* ================= 底部：控制中枢 ================= */
+        .bottom-controls { width: 100%; padding: 0 0 20px 0; background: linear-gradient(to top, rgba(10,12,15,1) 30%, transparent); }
+
+        /* 1. 模型切换画廊 (支持横向滑动) */
+        .gallery-container {
+            width: 100%; overflow-x: auto; padding: 10px 20px 20px;
+            display: flex; gap: 12px; touch-action: pan-x; /* 允许横向手势滑动 */
+        }
+        .gallery-container::-webkit-scrollbar { display: none; } /* 隐藏滚动条 */
+        .item {
+            flex-shrink: 0; width: 64px; height: 64px; border-radius: 12px;
+            background-color: rgba(255,255,255,0.05); background-size: cover; background-position: center;
+            border: 2px solid transparent; cursor: pointer; transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .item.active { border-color: #d4af37; transform: scale(1.05); box-shadow: 0 0 15px rgba(212, 175, 55, 0.4); }
+
+        /* 2. 音频播放器 */
+        .audio-player {
+            margin: 0 20px 15px; padding: 15px 20px;
+            background: rgba(20, 25, 30, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex; align-items: center; gap: 15px;
+        }
+        .play-btn {
+            width: 36px; height: 36px; border-radius: 50%; border: none;
+            background: #d4af37; color: #111; font-size: 16px; 
+            display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.2s;
+        }
+        .play-btn:active { transform: scale(0.9); }
+        .progress-wrapper { flex: 1; display: flex; flex-direction: column; gap: 6px; }
         
-        .progress-container { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-        #progress-bar { width: 100%; cursor: pointer; accent-color: #d4af37; height: 4px; }
-        .time-info { display: flex; justify-content: space-between; font-size: 10px; color: #888; font-family: monospace; }
+        /* 自定义精美进度条 */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 0; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.15); border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { height: 14px; width: 14px; border-radius: 50%; background: #d4af37; cursor: pointer; -webkit-appearance: none; margin-top: -5px; box-shadow: 0 0 10px rgba(212,175,55,0.5); }
+        .time-info { display: flex; justify-content: space-between; font-size: 11px; color: #888; font-family: monospace; }
 
-        /* 底部画廊 */
-        .bottom-gallery { bottom: 0; left: 0; width: 100%; height: 110px; background: rgba(0,0,0,0.8); display: flex; align-items: center; padding: 0 40px; gap: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
-        .item { min-width: 130px; height: 70px; background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #888; cursor: pointer; transition: 0.3s; }
-        .item.active { border-color: #d4af37; background: rgba(212, 175, 55, 0.1); color: #fff; }
-
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #d4af37; font-size: 16px; z-index: 100; display: none; letter-spacing: 2px; }
+        /* 3. Logo 区域 */
+        .logo-area { text-align: center; font-size: 14px; color: rgba(255,255,255,0.4); letter-spacing: 4px; font-weight: 300; margin-bottom: 10px; }
+        
+        /* 加载提示 */
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #d4af37; font-size: 14px; z-index: 100; display: none; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 20px; backdrop-filter: blur(5px); }
     </style>
 
     <script type="importmap">
@@ -53,22 +89,41 @@
 </head>
 <body>
 
-    <div class="bg-overlay"></div>
-    <div id="loading">正在加载 3D 资产...</div>
+    <div id="loading">数据加载中...</div>
 
-    <header class="ui-layer">
-        <div class="logo">遗珍 <span>数字博物馆</span></div>
-        <div class="search-box">请输入藏品编号</div>
-    </header>
+    <div id="ui-container">
+        
+        <div class="top-info">
+            <h1 id="ui-title">加载中</h1>
+            <div class="meta" id="ui-meta">...</div>
+            <div class="desc" id="ui-desc">请稍候...</div>
+        </div>
 
-    <div class="ui-layer info-card">
-        <h1 id="ui-title">文物名称</h1>
-        <div class="description" id="ui-desc">文物描述加载中...</div>
+        <div class="bottom-controls">
+            
+            <div class="gallery-container">
+                <div class="item" 
+                     data-model="https://modelviewer.dev/shared-assets/models/NeilArmstrong.glb" 
+                     data-audio="https://www.w3schools.com/html/horse.mp3" 
+                     data-title="阿波罗宇航服" 
+                     data-meta="Artifact 001 | 现代科技"
+                     data-desc="人类首次登月时穿着的宇航服。双指缩放放大后，可单指平移查看细节；缩小到全景时自动归中锁定。">
+                     <span style="font-size:10px; color:#fff; display:block; text-align:center; line-height:64px;">宇航服</span>
+                </div>
+                
+                <div class="item" 
+                     data-model="https://modelviewer.dev/shared-assets/models/DamagedHelmet.glb" 
+                     data-audio="https://www.w3schools.com/html/horse.mp3" 
+                     data-title="战损头盔" 
+                     data-meta="Artifact 002 | 科幻资产"
+                     data-desc="细节极其丰富的科幻头盔。注意观察表面划痕的反光细节。">
+                     <span style="font-size:10px; color:#fff; display:block; text-align:center; line-height:64px;">头盔</span>
+                </div>
+            </div>
 
-        <div class="audio-player">
-            <div class="audio-controls">
-                <button id="play-btn">▶</button>
-                <div class="progress-container">
+            <div class="audio-player">
+                <button class="play-btn" id="play-btn">▶</button>
+                <div class="progress-wrapper">
                     <input type="range" id="progress-bar" value="0" min="0" max="100">
                     <div class="time-info">
                         <span id="curr-time">00:00</span>
@@ -76,23 +131,8 @@
                     </div>
                 </div>
             </div>
-            <div style="font-size: 10px; color: #e6c27a;">语音导览播放中</div>
-        </div>
-    </div>
 
-    <div class="ui-layer bottom-gallery">
-        <div class="gallery-items" style="display: flex; gap: 15px;">
-            <div class="item" 
-                 data-model="qinghuaci.glb" 
-                 data-audio="wav.mp3" 
-                 data-title="阿波罗宇航服" 
-                 data-desc="这件宇航服见证了人类跨向月球的一大步。材质包含多层聚合物与金属纤维。">宇航服</div>
-            
-            <div class="item" 
-                 data-model="1.glb" 
-                 data-audio="https://www.w3schools.com/html/horse.mp3" 
-                 data-title="战损头盔" 
-                 data-desc="细节极致的 3D 渲染，展示了金属撞击后的凹痕与氧化层。">战损头盔</div>
+            <div class="logo-area">YIZHEN MUSEUM</div>
         </div>
     </div>
 
@@ -103,42 +143,45 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // 1. 基础配置
+        // ================= 1. 场景基础 =================
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // 手机端因为屏幕窄，视野角可以稍微调大一点，比如从45调到50
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5); 
+        // 灯光配置
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); 
         scene.add(ambientLight);
-        const pointLight = new THREE.PointLight(0xffffff, 10);
-        pointLight.position.set(5, 5, 5);
-        scene.add(pointLight);
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 2);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
 
-        // 2. 控制器配置 (转台动画核心)
+        // ================= 2. 控制器与核心交互逻辑 =================
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.autoRotate = true; // 开启自动转台
-        controls.autoRotateSpeed = 2.0; // 转速
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = true; 
+        controls.autoRotateSpeed = 1.5;
 
+        // 存储文物的几何中心，以及需要看见全貌的“默认距离”
+        let modelCenter = new THREE.Vector3(0,0,0); 
+        let defaultCameraDistance = 10; 
         let autoRotateTimer = null;
 
-        // 监听交互：当用户开始操作时，关闭自动旋转
+        // 监听交互事件处理“自动旋转”的停启
         controls.addEventListener('start', () => {
             controls.autoRotate = false;
             clearTimeout(autoRotateTimer);
         });
-
-        // 监听交互：当用户松开鼠标，开启 10 秒倒计时
         controls.addEventListener('end', () => {
-            autoRotateTimer = setTimeout(() => {
-                controls.autoRotate = true;
-            }, 10000); // 10秒后恢复
+            autoRotateTimer = setTimeout(() => { controls.autoRotate = true; }, 10000); // 10秒恢复旋转
         });
 
-        // 3. 音频逻辑核心
+        // ================= 3. 音频逻辑 =================
         const audio = new Audio();
         const playBtn = document.getElementById('play-btn');
         const progressBar = document.getElementById('progress-bar');
@@ -146,71 +189,85 @@
         const totalTimeLabel = document.getElementById('total-time');
 
         playBtn.onclick = () => {
-            if (audio.paused) {
-                audio.play();
-                playBtn.innerText = '⏸';
-            } else {
-                audio.pause();
-                playBtn.innerText = '▶';
-            }
+            if (audio.paused) { audio.play(); playBtn.innerText = '⏸'; } 
+            else { audio.pause(); playBtn.innerText = '▶'; }
         };
 
-        // 更新进度条
         audio.ontimeupdate = () => {
-            const progress = (audio.currentTime / audio.duration) * 100;
-            progressBar.value = progress || 0;
+            if (!audio.duration) return;
+            progressBar.value = (audio.currentTime / audio.duration) * 100;
             currTimeLabel.innerText = formatTime(audio.currentTime);
         };
 
-        // 加载音频长度
-        audio.onloadedmetadata = () => {
-            totalTimeLabel.innerText = formatTime(audio.duration);
-        };
+        audio.onloadedmetadata = () => { totalTimeLabel.innerText = formatTime(audio.duration); };
 
-        // 进度条拖动寻时
-        progressBar.oninput = () => {
-            const time = (progressBar.value / 100) * audio.duration;
-            audio.currentTime = time;
-        };
+        progressBar.oninput = () => { audio.currentTime = (progressBar.value / 100) * audio.duration; };
+        // 音频播放完毕自动暂停并重置按钮
+        audio.onended = () => { playBtn.innerText = '▶'; progressBar.value = 0; };
 
+        // 支持长音频的格式化（如果超过一小时会显示 HH:MM:SS，否则 MM:SS）
         function formatTime(secs) {
-            const m = Math.floor(secs / 60);
+            if(isNaN(secs)) return "00:00";
+            const h = Math.floor(secs / 3600);
+            const m = Math.floor((secs % 3600) / 60);
             const s = Math.floor(secs % 60);
-            return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+            const mm = m < 10 ? '0' + m : m;
+            const ss = s < 10 ? '0' + s : s;
+            return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
         }
 
-        // 4. 加载模型逻辑
+        // ================= 4. 模型加载逻辑 =================
         const loader = new GLTFLoader();
         let currentModel = null;
 
-        function loadArtifact(url, title, desc, audioUrl) {
+        function loadArtifact(url, title, meta, desc, audioUrl) {
             if (currentModel) scene.remove(currentModel);
             document.getElementById('loading').style.display = 'block';
             
-            // 同步音频
+            // 音频处理
             audio.src = audioUrl;
             audio.pause();
             playBtn.innerText = '▶';
+            progressBar.value = 0;
+            currTimeLabel.innerText = "00:00";
+
+            // UI 文字替换
+            document.getElementById('ui-title').innerText = title;
+            document.getElementById('ui-meta').innerText = meta;
+            document.getElementById('ui-desc').innerText = desc;
 
             loader.load(url, (gltf) => {
                 currentModel = gltf.scene;
                 scene.add(currentModel);
                 
-                // 自动对焦逻辑
+                // === 尺寸计算与居中 ===
                 const box = new THREE.Box3().setFromObject(currentModel);
                 const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-                controls.target.copy(center);
+                modelCenter = box.getCenter(new THREE.Vector3());
+                
+                // 将手机端的模型稍微往上提一点，避开底部的控制面板
+                modelCenter.y += size.y * 0.15;
+                controls.target.copy(modelCenter);
+
                 const maxDim = Math.max(size.x, size.y, size.z);
-                camera.position.set(center.x, center.y, center.z + maxDim * 2.5);
+                const fov = camera.fov * (Math.PI / 180);
+                
+                // 计算刚好能看到模型全貌的距离（乘以1.8留出安全边距）
+                defaultCameraDistance = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
+                
+                camera.position.set(modelCenter.x, modelCenter.y, modelCenter.z + defaultCameraDistance);
+                camera.near = maxDim / 100;
+                camera.far = defaultCameraDistance * 10;
+                camera.updateProjectionMatrix();
+
+                // 限制缩放极值
+                controls.maxDistance = defaultCameraDistance * 1.2; // 稍微允许缩小一点点
                 
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('ui-title').innerText = title;
-                document.getElementById('ui-desc').innerText = desc;
             });
         }
 
-        // 5. 事件绑定
+        // ================= 5. 事件绑定与动画循环 =================
         document.querySelectorAll('.item').forEach(item => {
             item.onclick = function() {
                 document.querySelectorAll('.item').forEach(i => i.classList.remove('active'));
@@ -218,6 +275,7 @@
                 loadArtifact(
                     this.dataset.model, 
                     this.dataset.title, 
+                    this.dataset.meta,
                     this.dataset.desc, 
                     this.dataset.audio
                 );
@@ -225,10 +283,29 @@
         });
 
         // 默认点击第一个
-        document.querySelector('.item').click();
+        if(document.querySelector('.item')) { document.querySelector('.item').click(); }
 
         function animate() {
             requestAnimationFrame(animate);
+            
+            // === 核心逻辑：基于放大距离的“平移控制”与“自动归中” ===
+            if (currentModel) {
+                // 计算当前摄像机到目标点(模型)的距离
+                const currentDist = camera.position.distanceTo(controls.target);
+                
+                // 我们设定一个阈值（比默认全景距离稍微小一点），代表用户“放大了”
+                const zoomInThreshold = defaultCameraDistance * 0.95;
+
+                if (currentDist < zoomInThreshold) {
+                    // 放大了：允许双指平移 (Pan)
+                    controls.enablePan = true;
+                } else {
+                    // 缩小到全景：禁止平移，并且如果模型偏了，让它丝滑地“吸”回屏幕中心
+                    controls.enablePan = false;
+                    controls.target.lerp(modelCenter, 0.1); 
+                }
+            }
+
             controls.update();
             renderer.render(scene, camera);
         }

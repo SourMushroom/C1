@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>遗珍 · 智能 3D 展厅</title>
+    
+    <style>
+        /* 保持之前的高级样式 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "PingFang SC", "Microsoft YaHei", serif; color: #e0e0e0; overflow: hidden; touch-action: none; background: #0a0a0a; background-image: url('https://images.unsplash.com/photo-1541123356219-284ebe98ae3b?q=80&w=2000&auto=format&fit=crop'); background-size: cover; background-position: center; }
+        .bg-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 12, 18, 0.8); backdrop-filter: blur(10px); z-index: 0; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        .ui-layer { position: absolute; z-index: 10; pointer-events: none; }
+        .ui-layer > * { pointer-events: auto; }
+        
+        /* 顶部导航 */
+        header { top: 0; left: 0; width: 100%; height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); border-bottom: 1px solid rgba(212, 175, 55, 0.2); }
+        .logo { font-size: 20px; font-weight: bold; color: #fff; letter-spacing: 2px; }
+        .logo span { color: #d4af37; }
+
+        /* 左侧信息牌 */
+        .info-card { top: 120px; left: 40px; width: 340px; background: rgba(18, 25, 38, 0.7); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 25px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+        .info-card h1 { font-size: 24px; color: #e6c27a; margin-bottom: 5px; }
+        .description { font-size: 13px; color: #bbb; line-height: 1.7; margin-bottom: 20px; height: 100px; overflow-y: auto; }
+
+        /* ================= 音频播放器样式 ================= */
+        .audio-player { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 15px; border: 1px solid rgba(212, 175, 55, 0.2); }
+        .audio-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        #play-btn { background: #d4af37; border: none; width: 32px; height: 32px; border-radius: 50%; color: #000; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        #play-btn:hover { background: #fff; transform: scale(1.1); }
+        
+        .progress-container { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        #progress-bar { width: 100%; cursor: pointer; accent-color: #d4af37; height: 4px; }
+        .time-info { display: flex; justify-content: space-between; font-size: 10px; color: #888; font-family: monospace; }
+
+        /* 底部画廊 */
+        .bottom-gallery { bottom: 0; left: 0; width: 100%; height: 110px; background: rgba(0,0,0,0.8); display: flex; align-items: center; padding: 0 40px; gap: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .item { min-width: 130px; height: 70px; background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #888; cursor: pointer; transition: 0.3s; }
+        .item.active { border-color: #d4af37; background: rgba(212, 175, 55, 0.1); color: #fff; }
+
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #d4af37; font-size: 16px; z-index: 100; display: none; letter-spacing: 2px; }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div class="bg-overlay"></div>
+    <div id="loading">正在加载 3D 资产...</div>
+
+    <header class="ui-layer">
+        <div class="logo">遗珍 <span>数字博物馆</span></div>
+        <div class="search-box">请输入藏品编号</div>
+    </header>
+
+    <div class="ui-layer info-card">
+        <h1 id="ui-title">文物名称</h1>
+        <div class="description" id="ui-desc">文物描述加载中...</div>
+
+        <div class="audio-player">
+            <div class="audio-controls">
+                <button id="play-btn">▶</button>
+                <div class="progress-container">
+                    <input type="range" id="progress-bar" value="0" min="0" max="100">
+                    <div class="time-info">
+                        <span id="curr-time">00:00</span>
+                        <span id="total-time">00:00</span>
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 10px; color: #e6c27a;">语音导览播放中</div>
+        </div>
+    </div>
+
+    <div class="ui-layer bottom-gallery">
+        <div class="gallery-items" style="display: flex; gap: 15px;">
+            <div class="item" 
+                 data-model="qinghuaci.glb" 
+                 data-audio="wav.mp3" 
+                 data-title="阿波罗宇航服" 
+                 data-desc="这件宇航服见证了人类跨向月球的一大步。材质包含多层聚合物与金属纤维。">宇航服</div>
+            
+            <div class="item" 
+                 data-model="1.glb" 
+                 data-audio="https://www.w3schools.com/html/horse.mp3" 
+                 data-title="战损头盔" 
+                 data-desc="细节极致的 3D 渲染，展示了金属撞击后的凹痕与氧化层。">战损头盔</div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // 1. 基础配置
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5); 
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 10);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
+
+        // 2. 控制器配置 (转台动画核心)
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = true; // 开启自动转台
+        controls.autoRotateSpeed = 2.0; // 转速
+
+        let autoRotateTimer = null;
+
+        // 监听交互：当用户开始操作时，关闭自动旋转
+        controls.addEventListener('start', () => {
+            controls.autoRotate = false;
+            clearTimeout(autoRotateTimer);
+        });
+
+        // 监听交互：当用户松开鼠标，开启 10 秒倒计时
+        controls.addEventListener('end', () => {
+            autoRotateTimer = setTimeout(() => {
+                controls.autoRotate = true;
+            }, 10000); // 10秒后恢复
+        });
+
+        // 3. 音频逻辑核心
+        const audio = new Audio();
+        const playBtn = document.getElementById('play-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const currTimeLabel = document.getElementById('curr-time');
+        const totalTimeLabel = document.getElementById('total-time');
+
+        playBtn.onclick = () => {
+            if (audio.paused) {
+                audio.play();
+                playBtn.innerText = '⏸';
+            } else {
+                audio.pause();
+                playBtn.innerText = '▶';
+            }
+        };
+
+        // 更新进度条
+        audio.ontimeupdate = () => {
+            const progress = (audio.currentTime / audio.duration) * 100;
+            progressBar.value = progress || 0;
+            currTimeLabel.innerText = formatTime(audio.currentTime);
+        };
+
+        // 加载音频长度
+        audio.onloadedmetadata = () => {
+            totalTimeLabel.innerText = formatTime(audio.duration);
+        };
+
+        // 进度条拖动寻时
+        progressBar.oninput = () => {
+            const time = (progressBar.value / 100) * audio.duration;
+            audio.currentTime = time;
+        };
+
+        function formatTime(secs) {
+            const m = Math.floor(secs / 60);
+            const s = Math.floor(secs % 60);
+            return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+        }
+
+        // 4. 加载模型逻辑
+        const loader = new GLTFLoader();
+        let currentModel = null;
+
+        function loadArtifact(url, title, desc, audioUrl) {
+            if (currentModel) scene.remove(currentModel);
+            document.getElementById('loading').style.display = 'block';
+            
+            // 同步音频
+            audio.src = audioUrl;
+            audio.pause();
+            playBtn.innerText = '▶';
+
+            loader.load(url, (gltf) => {
+                currentModel = gltf.scene;
+                scene.add(currentModel);
+                
+                // 自动对焦逻辑
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+                controls.target.copy(center);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.set(center.x, center.y, center.z + maxDim * 2.5);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('ui-title').innerText = title;
+                document.getElementById('ui-desc').innerText = desc;
+            });
+        }
+
+        // 5. 事件绑定
+        document.querySelectorAll('.item').forEach(item => {
+            item.onclick = function() {
+                document.querySelectorAll('.item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                loadArtifact(
+                    this.dataset.model, 
+                    this.dataset.title, 
+                    this.dataset.desc, 
+                    this.dataset.audio
+                );
+            };
+        });
+
+        // 默认点击第一个
+        document.querySelector('.item').click();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
